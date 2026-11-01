@@ -38,7 +38,7 @@ describe('asset paths', () => {
   });
 
   it('defaults the local store next to the other dev stores', () => {
-    expect(defaultLocalRenderJobPath('/tmp/.data')).toBe('/tmp/.data/render-jobs.json');
+    expect(defaultLocalRenderJobPath('/tmp/.data')).toBe(join('/tmp/.data', 'render-jobs.json'));
   });
 });
 

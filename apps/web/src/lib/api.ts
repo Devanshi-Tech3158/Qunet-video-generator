@@ -9,9 +9,36 @@ import { handleDemoFallback } from './demoBackend';
  *
  * Empty by default so the browser talks to the same origin it loaded from and
  * the Vite dev server proxies `/api`, `/health` and `/ws` to the API. Set
- * `VITE_API_URL` only when the API lives on another origin.
+ * `VITE_API_URL` or configure via localStorage when the API lives on another origin.
  */
-const BASE_URL: string = import.meta.env.VITE_API_URL ?? '';
+export function getApiBaseUrl(): string {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const custom = window.localStorage.getItem('creatordna.api-url');
+      if (custom && custom.trim().length > 0) {
+        return custom.trim().replace(/\/$/, '');
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return import.meta.env.VITE_API_URL ?? '';
+}
+
+export function setApiBaseUrl(url: string | null): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      if (url === null || url.trim().length === 0) {
+        window.localStorage.removeItem('creatordna.api-url');
+      } else {
+        window.localStorage.setItem('creatordna.api-url', url.trim());
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
 
 /** Error thrown for a non-2xx response, carrying the API's error code. */
 export class ApiError extends Error {
@@ -81,7 +108,7 @@ export async function request<TSchema extends ZodType>(
 
   let response: Response;
   try {
-    response = await fetch(`${BASE_URL}${path}`, {
+    response = await fetch(`${getApiBaseUrl()}${path}`, {
       method,
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),

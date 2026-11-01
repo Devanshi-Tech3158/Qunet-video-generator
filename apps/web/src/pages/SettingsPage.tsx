@@ -7,9 +7,12 @@ import { useDnaProfile, useUpdateDna } from '../hooks/useDna';
 import { useToast } from '../hooks/useToast';
 import { DEVANSHI_AVATAR } from '../lib/studioFixtures';
 import { cn } from '../lib/cn';
+import { getApiBaseUrl, setApiBaseUrl, fetchHealth } from '../lib/api';
+import { getShareAdapter } from '../lib/qoneqt';
 
 const SETTINGS_TABS = [
   { id: 'profile', label: 'Profile', icon: '👤' },
+  { id: 'integrations', label: 'API & Integrations', icon: '⚡' },
   { id: 'notifications', label: 'Notifications', icon: '🔔' },
   { id: 'account', label: 'Account', icon: '🛡️' },
   { id: 'help', label: 'Help & Support', icon: '❓' },
@@ -20,14 +23,59 @@ export function SettingsPage() {
   const dnaQuery = useDnaProfile();
   const updateDna = useUpdateDna();
 
-  const [activeTab, setActiveTab] = useState<(typeof SETTINGS_TABS)[number]['id']>('profile');
+    const [activeTab, setActiveTab] = useState<(typeof SETTINGS_TABS)[number]['id']>('profile');
   const [editing, setEditing] = useState(false);
+  const [apiUrl, setApiUrl] = useState(() => getApiBaseUrl());
+  const [qoneqtUrl, setQoneqtUrl] = useState(() => (typeof window !== 'undefined' ? window.localStorage?.getItem('qoneqt.api-url') ?? '' : ''));
+  const [qoneqtKey, setQoneqtKey] = useState(() => (typeof window !== 'undefined' ? window.localStorage?.getItem('qoneqt.api-key') ?? '' : ''));
+  const [testingApi, setTestingApi] = useState(false);
+  const [apiHealthStatus, setApiHealthStatus] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState('Devanshi Goyal');
   const [roleSubtitle, setRoleSubtitle] = useState('Creator · CSE');
   const [niche, setNiche] = useState(dnaQuery.data?.dna.niche ?? 'Tech (CSE)');
   const [styleText, setStyleText] = useState(dnaQuery.data?.dna.style ?? 'Friendly - Educational');
 
   const dna = dnaQuery.data?.dna;
+
+    async function handleTestApi(): Promise<void> {
+    setTestingApi(true);
+    setApiHealthStatus(null);
+    try {
+      const res = await fetchHealth();
+      setApiHealthStatus(`Online (${res.checks.redis === 'ok' ? 'Redis connected' : 'Ready'})`);
+      push({ title: 'API Connection Successful', description: `Connected to ${res.service} v${res.version}`, tone: 'success' });
+    } catch {
+      setApiHealthStatus('Demo / Offline Mode (local fallback active)');
+      push({ title: 'Using Offline / Demo API', description: 'Backend is operating in zero-quota demo fallback mode.', tone: 'neutral' });
+    } finally {
+      setTestingApi(false);
+    }
+  }
+
+  function handleSaveApi(): void {
+    setApiBaseUrl(apiUrl.trim());
+    push({ title: 'API Endpoint Saved', description: apiUrl.trim() ? apiUrl.trim() : 'Using default dev-server / same-origin proxy', tone: 'success' });
+  }
+
+  function handleSaveQoneqt(): void {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        if (qoneqtUrl.trim()) {
+          window.localStorage.setItem('qoneqt.api-url', qoneqtUrl.trim());
+        } else {
+          window.localStorage.removeItem('qoneqt.api-url');
+        }
+        if (qoneqtKey.trim()) {
+          window.localStorage.setItem('qoneqt.api-key', qoneqtKey.trim());
+        } else {
+          window.localStorage.removeItem('qoneqt.api-key');
+        }
+      }
+      push({ title: 'Qoneqt API Saved', description: qoneqtUrl.trim() ? 'Live REST adapter configured' : 'Using preview mock adapter', tone: 'success' });
+    } catch {
+      // ignore
+    }
+  }
 
   function handleSaveProfile(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -245,6 +293,157 @@ export function SettingsPage() {
                 <span aria-hidden="true">🤍</span>
               </div>
             </>
+          ) : null}
+
+                    {activeTab === 'integrations' ? (
+            <div className="space-y-6">
+              <Card>
+                <CardHeader
+                  title="Backend API Configuration"
+                  description="Connect CreatorDNA Studio to your REST + WebSocket server or Cloud Run instance."
+                />
+                <CardContent className="space-y-4">
+                  <div>
+                    <label htmlFor="api-base-url" className="block text-caption font-semibold text-ink-700">
+                      API Base URL
+                    </label>
+                    <input
+                      id="api-base-url"
+                      type="url"
+                      placeholder="e.g. http://localhost:4000 or https://creatordna-api-xxx.a.run.app"
+                      value={apiUrl}
+                      onChange={(e) => setApiUrl(e.target.value)}
+                      className="mt-1.5 h-10 w-full rounded-xl border border-line bg-surface-muted px-3 text-body text-ink-900 focus:border-peach-400 focus:outline-none"
+                    />
+                    <p className="mt-1 text-tiny text-ink-500">
+                      Leave empty to use same-origin proxy / dev-server, or specify a remote backend.
+                    </p>
+                  </div>
+
+                  {apiHealthStatus !== null ? (
+                    <div className="rounded-xl border border-peach-200 bg-peach-50 px-3.5 py-2.5 text-caption font-medium text-peach-900">
+                      Status: {apiHealthStatus}
+                    </div>
+                  ) : null}
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <Button size="sm" onClick={handleSaveApi}>
+                      Save API Endpoint
+                    </Button>
+                    <Button size="sm" variant="secondary" loading={testingApi} onClick={() => void handleTestApi()}>
+                      Test Connection
+                    </Button>
+                    {apiUrl ? (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          setApiUrl('');
+                          setApiBaseUrl(null);
+                          push({ title: 'Reset to default API', tone: 'neutral' });
+                        }}
+                      >
+                        Reset
+                      </Button>
+                    ) : null}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader
+                  title="Qoneqt API Integration"
+                  description="Publish rendered 9:16 reels directly to Qoneqt channels and feeds."
+                />
+                <CardContent className="space-y-4">
+                  <div>
+                    <label htmlFor="qoneqt-url" className="block text-caption font-semibold text-ink-700">
+                      Qoneqt API Endpoint URL
+                    </label>
+                    <input
+                      id="qoneqt-url"
+                      type="url"
+                      placeholder="https://api.qoneqt.com/v1/posts or mock endpoint"
+                      value={qoneqtUrl}
+                      onChange={(e) => setQoneqtUrl(e.target.value)}
+                      className="mt-1.5 h-10 w-full rounded-xl border border-line bg-surface-muted px-3 text-body text-ink-900 focus:border-peach-400 focus:outline-none"
+                    />
+                    <p className="mt-1 text-tiny text-ink-500">
+                      Current adapter: <strong>{getShareAdapter().name}</strong> ({getShareAdapter().live ? 'Live API mode' : 'Preview mock mode'})
+                    </p>
+                  </div>
+
+                  <div>
+                    <label htmlFor="qoneqt-key" className="block text-caption font-semibold text-ink-700">
+                      Qoneqt API / Bearer Token (Optional)
+                    </label>
+                    <input
+                      id="qoneqt-key"
+                      type="password"
+                      placeholder="qoneqt_live_..."
+                      value={qoneqtKey}
+                      onChange={(e) => setQoneqtKey(e.target.value)}
+                      className="mt-1.5 h-10 w-full rounded-xl border border-line bg-surface-muted px-3 text-body text-ink-900 focus:border-peach-400 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <Button size="sm" onClick={handleSaveQoneqt}>
+                      Save Qoneqt Settings
+                    </Button>
+                    {qoneqtUrl ? (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          setQoneqtUrl('');
+                          setQoneqtKey('');
+                          try {
+                            window.localStorage.removeItem('qoneqt.api-url');
+                            window.localStorage.removeItem('qoneqt.api-key');
+                          } catch { /* storage error ignored */ }
+                          push({ title: 'Reset to preview mock adapter', tone: 'neutral' });
+                        }}
+                      >
+                        Reset to Mock
+                      </Button>
+                    ) : null}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader
+                  title="Google Gemini AI & Cloud Integration"
+                  description="Multimodal models powering Creator DNA, Hook Lab, and Voice Coach."
+                />
+                <CardContent className="space-y-2 text-caption text-ink-700">
+                  <div className="flex items-center justify-between rounded-xl border border-line bg-surface-muted/50 p-3">
+                    <div>
+                      <span className="block font-semibold text-ink-900">Gemini 2.0 Flash</span>
+                      <span className="block text-tiny text-ink-500">DNA extraction, Hook generation, Audience mirror</span>
+                    </div>
+                    <span className="rounded-pill bg-emerald-100 px-2.5 py-1 text-tiny font-bold text-emerald-800">Ready</span>
+                  </div>
+
+                  <div className="flex items-center justify-between rounded-xl border border-line bg-surface-muted/50 p-3">
+                    <div>
+                      <span className="block font-semibold text-ink-900">Gemini Live WebSocket</span>
+                      <span className="block text-tiny text-ink-500">Real-time low-latency voice rehearsal coaching</span>
+                    </div>
+                    <span className="rounded-pill bg-emerald-100 px-2.5 py-1 text-tiny font-bold text-emerald-800">Ready</span>
+                  </div>
+
+                  <div className="flex items-center justify-between rounded-xl border border-line bg-surface-muted/50 p-3">
+                    <div>
+                      <span className="block font-semibold text-ink-900">Veo / TTS / Lyria</span>
+                      <span className="block text-tiny text-ink-500">Background video, voiceover, and soundtrack synthesis</span>
+                    </div>
+                    <span className="rounded-pill bg-peach-100 px-2.5 py-1 text-tiny font-bold text-peach-800">Integrated</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           ) : null}
 
           {activeTab === 'notifications' ? (

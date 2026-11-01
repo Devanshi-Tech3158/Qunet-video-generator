@@ -88,8 +88,101 @@ export function createMockQoneqtAdapter(options: { latencyMs?: number; failNext?
   } satisfies ShareAdapter;
 }
 
-/** The adapter the app uses. Mock until the Qoneqt contract lands. */
+/**
+ * Real HTTP adapter for the Qoneqt REST API.
+ */
+export function createHttpQoneqtAdapter(
+  endpointUrl: string,
+  options: { apiKey?: string; latencyMs?: number } = {},
+): ShareAdapter {
+  return {
+    name: 'qoneqt-rest-api',
+    live: true,
+
+    async share(payload: QoneqtSharePayload): Promise<QoneqtShareResult> {
+      const problem = validateSharePayload(payload);
+      if (problem !== null) {
+        return { ok: false, error: problem, adapter: 'qoneqt-rest-api' };
+      }
+
+      if (options.latencyMs !== undefined && options.latencyMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, options.latencyMs));
+      }
+
+      try {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        };
+        if (options.apiKey !== undefined && options.apiKey.trim().length > 0) {
+          headers.Authorization = `Bearer ${options.apiKey.trim()}`;
+        }
+
+        const response = await fetch(endpointUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const body = await response.text().catch(() => '');
+          return {
+            ok: false,
+            error: `Qoneqt API responded with HTTP ${response.status}: ${body || response.statusText}`,
+            adapter: 'qoneqt-rest-api',
+          };
+        }
+
+        const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+        const postId =
+          typeof data.postId === 'string'
+            ? data.postId
+            : typeof data.id === 'string'
+              ? data.id
+              : `qoneqt_${payload.jobId}`;
+        const url =
+          typeof data.url === 'string'
+            ? data.url
+            : typeof data.postUrl === 'string'
+              ? data.postUrl
+              : `https://qoneqt.com/post/${postId}`;
+
+        return {
+          ok: true,
+          postId,
+          url,
+          adapter: 'qoneqt-rest-api',
+        };
+      } catch (err) {
+        return {
+          ok: false,
+          error:
+            err instanceof Error
+              ? `Failed to publish to Qoneqt: ${err.message}`
+              : 'Network error publishing to Qoneqt',
+          adapter: 'qoneqt-rest-api',
+        };
+      }
+    },
+  } satisfies ShareAdapter;
+}
+
+/** The adapter the app uses. Uses live HTTP API when configured, otherwise falls back to the test/preview mock. */
 export function getShareAdapter(): ShareAdapter {
+  try {
+    const customEndpoint =
+      (typeof window !== 'undefined' && window.localStorage?.getItem('qoneqt.api-url')) ||
+      (typeof import.meta !== 'undefined' && import.meta.env?.VITE_QONEQT_API_URL);
+    if (typeof customEndpoint === 'string' && customEndpoint.trim().length > 0) {
+      const apiKey =
+        typeof window !== 'undefined'
+          ? window.localStorage?.getItem('qoneqt.api-key') ?? undefined
+          : undefined;
+      return createHttpQoneqtAdapter(customEndpoint.trim(), { apiKey: apiKey ?? undefined });
+    }
+  } catch {
+    // Ignore storage errors and fall back to mock
+  }
   return createMockQoneqtAdapter();
 }
 

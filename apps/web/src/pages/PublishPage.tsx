@@ -5,7 +5,7 @@ import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../hooks/useToast';
 import { useLibrary } from '../hooks/useLibrary';
 import { downloadBlob, downloadStem, fetchAsBlob } from '../lib/download';
-import { getShareAdapter } from '../lib/qoneqt';
+import { getShareAdapter, shareAdapterNotice } from '../lib/qoneqt';
 import { THUMBNAILS } from '../lib/studioFixtures';
 import { demoVideoUrl } from '../lib/demoAssets';
 
@@ -126,6 +126,10 @@ export function PublishPage() {
                 : 'Publish to Qoneqt'}
           </span>
         </button>
+
+        <p className="text-center text-tiny text-ink-500">
+          {shareAdapterNotice(getShareAdapter())}
+        </p>
 
         {/* Secondary Action Row: Download MP4 + Copy Link */}
         <div className="grid grid-cols-2 gap-3.5">

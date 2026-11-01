@@ -25,11 +25,13 @@ try {
 
 const rawBase = import.meta.env.BASE_URL ?? '/';
 const configuredBase = rawBase === '/' ? '/' : rawBase.replace(/\/$/, '');
+const pathname = window.location.pathname;
+const isRepoPath = pathname.toLowerCase().startsWith('/qunet-video-generator');
 const basename =
-  configuredBase !== '/' && window.location.pathname.startsWith(configuredBase)
+  configuredBase !== '/' && pathname.startsWith(configuredBase)
     ? configuredBase
-    : window.location.pathname.startsWith('/Qunet-video-generator')
-      ? '/Qunet-video-generator'
+    : isRepoPath
+      ? pathname.slice(0, '/qunet-video-generator'.length)
       : '/';
 
 const container = document.getElementById('root');

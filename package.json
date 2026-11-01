@@ -13,7 +13,7 @@
     "dev:web": "pnpm --filter @creatordna/web dev",
     "dev:api": "pnpm --filter @creatordna/api dev",
     "dev:worker": "pnpm --filter @creatordna/worker dev",
-    "build": "pnpm -r --topological --if-present build",
+    "build": "pnpm -r --if-present build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "pnpm -r --if-present typecheck",
