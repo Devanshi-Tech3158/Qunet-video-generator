@@ -1,5 +1,7 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Badge } from '../components/Badge';
+import { Button } from '../components/Button';
+import { getGeneratedVideoUrl } from '../lib/videoGenerator';
 import { Card, CardContent } from '../components/Card';
 import { PageHeader } from '../components/PageHeader';
 import { ProgressBar } from '../components/ProgressBar';
@@ -94,6 +96,7 @@ export function RenderProgressPage() {
   const stageIndex = uiStageIndex(render.stage);
   const headline = stageHeadline(render.stage, render.failed);
   const mp4 = job === null ? null : findMp4Asset(job.assets);
+  const hasMp4 = mp4 !== null || getGeneratedVideoUrl(jobId) !== null;
   const failure = job?.error ?? null;
 
   const activeChecklistIndex = SCREEN7_CHECKLIST.findIndex(
@@ -188,10 +191,21 @@ export function RenderProgressPage() {
                 <span aria-hidden="true" className="absolute -right-2 -top-2 text-title">✨</span>
               </div>
               <p className="text-body-lg font-bold text-ink-900">
-                Turning your idea into a video...
+                {render.finished ? 'Your video is ready!' : 'Turning your idea into a video...'}
               </p>
               <p className="mt-1 text-caption text-ink-500">
-                Tailoring script, voice-over, captions &amp; visuals to your Creator DNA.
+                {render.finished
+                  ? 'Scenes generated, animations rendered, and audio synced.'
+                  : 'Tailoring script, voice-over, captions & visuals to your Creator DNA.'}
+              </p>
+              {render.finished ? (
+                <div className="mt-4">
+                  <Button size="sm" onClick={() => navigate('/render/' + jobId + '/result')}>
+                    Open Finished Video →
+                  </Button>
+                </div>
+              ) : null}
+              <p className="hidden">
               </p>
             </div>
           </div>
@@ -272,13 +286,13 @@ export function RenderProgressPage() {
         onRetry={() => void render.retry()}
         onCancel={render.cancel}
         onViewResult={
-          render.finished === true && mp4 !== null
+          render.finished === true && hasMp4
             ? () => void navigate(`/render/${jobId}/result`)
             : undefined
         }
       />
 
-      {render.finished === true && mp4 === null ? (
+      {render.finished === true && !hasMp4 ? (
         <Card className="mt-6">
           <CardContent>
             <h2 className="text-body font-semibold text-ink-900">Finished, but no video yet</h2>

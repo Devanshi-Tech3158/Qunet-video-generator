@@ -19,6 +19,8 @@ import {
   type QoneqtSharePayload,
 } from '../lib/qoneqt';
 import { useQuery } from '@tanstack/react-query';
+import { generateScriptFromPrompt } from '../lib/scriptGenerator';
+import { generateVideoFromScript, getGeneratedVideoUrl } from '../lib/videoGenerator';
 
 /**
  * The finished render.
@@ -38,6 +40,9 @@ export function RenderResultPage() {
   const { push } = useToast();
   const library = useLibrary();
   const [sharing, setSharing] = useState(false);
+  const [customVideoUrl, setCustomVideoUrl] = useState<string | null>(() =>
+    getGeneratedVideoUrl(jobId),
+  );
 
   const query = useQuery({
     queryKey: ['render-result', jobId],
@@ -76,6 +81,22 @@ export function RenderResultPage() {
 
   // The script, as plain text, so "Download script" has something to write.
   const scriptText = useMemo(() => buildScriptText(payload), [payload]);
+  const effectiveMp4Url = customVideoUrl ?? mp4?.url ?? '';
+
+  useEffect(() => {
+    if (!jobId) return;
+    const existing = getGeneratedVideoUrl(jobId);
+    if (existing) {
+      setCustomVideoUrl(existing);
+      return;
+    }
+    if (title && title !== `Render ${jobId}` && jobId !== 'demo-binary-search') {
+      const script = generateScriptFromPrompt(title);
+      void generateVideoFromScript(jobId, script).then((url) => {
+        if (url) setCustomVideoUrl(url);
+      });
+    }
+  }, [jobId, title]);
 
   const saved = library.isSaved(jobId);
   const shared = library.items.find((item) => item.jobId === jobId)?.sharedToQoneqt === true;
@@ -126,12 +147,13 @@ export function RenderResultPage() {
   }, [jobId, job, mp4, title, caption, hashtags, scriptText, library, push]);
 
   const downloadMp4 = useCallback(async () => {
-    if (mp4?.url === undefined) {
+    const targetUrl = effectiveMp4Url || mp4?.url;
+    if (!targetUrl) {
       push({ title: 'No MP4 recorded for this job yet', tone: 'warning' });
       return;
     }
 
-    const blob = await fetchAsBlob(mp4.url);
+    const blob = await fetchAsBlob(targetUrl);
     if (blob === null) {
       // CORS or a dead link: the honest fallback is the link itself.
       push({
@@ -139,13 +161,13 @@ export function RenderResultPage() {
         description: 'Opening the MP4 in a new tab instead - save it from there.',
         tone: 'warning',
       });
-      window.open(mp4.url, '_blank', 'noopener');
+      window.open(targetUrl, '_blank', 'noopener');
       return;
     }
 
     downloadBlob(blob, `${downloadStem(jobId, title)}.mp4`);
     push({ title: 'Download started', tone: 'success' });
-  }, [mp4, jobId, title, push]);
+  }, [effectiveMp4Url, mp4, jobId, title, push]);
 
   const downloadScript = useCallback(() => {
     if (scriptText.trim().length === 0) {
@@ -261,7 +283,7 @@ export function RenderResultPage() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,300px)_minmax(0,1fr)]">
         <div>
-          {mp4 === null ? (
+          {mp4 === null && !effectiveMp4Url ? (
             <EmptyState
               title="No video recorded"
               description="The job finished without an MP4 asset on the record. That is a pipeline gap, not something you did."
@@ -278,7 +300,7 @@ export function RenderResultPage() {
                 />
                 <div className="relative z-10">
                   <VideoPlayer
-                    src={mp4.url ?? ''}
+                    src={effectiveMp4Url}
                     label={`Finished short: ${title}`}
                     poster={demoPosterUrl()}
                     captionsUrl={captions?.url}
@@ -286,7 +308,7 @@ export function RenderResultPage() {
                 </div>
                 <div className="pointer-events-none absolute inset-x-0 bottom-10 z-20 flex items-end justify-between bg-gradient-to-t from-black/80 via-black/40 to-transparent px-4 pb-3 pt-10 text-white">
                   <p className="text-body-lg font-bold drop-shadow-xs">
-                    Binary Search Made Easy ✨
+                    {caption || title}
                   </p>
                   <span className="rounded-md bg-black/60 px-2 py-0.5 text-tiny font-semibold tabular-nums">
                     0:46
@@ -297,7 +319,7 @@ export function RenderResultPage() {
           )}
 
           <div className="mt-4 flex flex-wrap gap-2">
-            <Button variant="primary" onClick={() => void downloadMp4()} disabled={mp4 === null}>
+            <Button variant="primary" onClick={() => void downloadMp4()} disabled={!effectiveMp4Url}>
               Download MP4
             </Button>
             <Button variant="secondary" onClick={downloadScript} disabled={scriptText.trim().length === 0}>
@@ -324,7 +346,7 @@ export function RenderResultPage() {
                 <button
                   type="button"
                   onClick={() => void downloadMp4()}
-                  disabled={mp4 === null}
+                  disabled={!effectiveMp4Url}
                   className="flex w-full items-center justify-between rounded-xl border border-line bg-surface-muted/70 px-4 py-2.5 text-body font-medium text-ink-900 transition-colors hover:bg-peach-50 disabled:opacity-40"
                 >
                   <span className="flex items-center gap-2.5">

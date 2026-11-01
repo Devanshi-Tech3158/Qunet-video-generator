@@ -11,6 +11,7 @@ import {
   type RenderStage,
 } from '@creatordna/shared';
 import { DEMO_VIDEO_PATH, demoVideoUrl } from './demoAssets';
+import { getGeneratedVideoUrl } from './videoGenerator';
 
 const DEMO_DNA_STORAGE_KEY = 'creatordna.demo.dna.v1';
 const DEMO_JOBS_STORAGE_KEY = 'creatordna.demo.jobs.v1';
@@ -160,6 +161,23 @@ export const DEMO_RENDER_TOTAL_MS = 15_000;
  * mount: on a static host nothing serves `/api/v1/render-assets/...`, so the
  * player would report a broken file on a job that claims to be finished.
  */
+function getJobFinishedAssets(jobId: string, assets: RenderAsset[]): RenderAsset[] {
+  const customUrl = getGeneratedVideoUrl(jobId);
+  if (customUrl) {
+    return [
+      {
+        kind: 'mp4',
+        storagePath: `renders/custom/${jobId}.mp4`,
+        url: customUrl,
+        mimeType: 'video/mp4',
+      },
+    ];
+  }
+  const existingMp4 = assets.find((a) => a.kind === 'mp4');
+  if (existingMp4) return assets;
+  return demoRenderAssets();
+}
+
 function demoRenderAssets(): RenderAsset[] {
   return [
     {
@@ -205,7 +223,7 @@ function simulateDemoJob(job: JobStatusResponse, now: number): JobStatusResponse
     progress: step.progress,
     // A finished job has run at least once, whichever way the demo got here.
     attemptsMade: finished ? Math.max(1, job.attemptsMade) : job.attemptsMade,
-    assets: finished ? demoRenderAssets() : job.assets,
+    assets: finished ? getJobFinishedAssets(job.jobId, job.assets) : job.assets,
   };
 }
 

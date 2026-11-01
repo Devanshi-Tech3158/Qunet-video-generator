@@ -6,8 +6,18 @@ import { Card, CardContent, CardHeader } from '../components/Card';
 import { PageHeader } from '../components/PageHeader';
 import { useToast } from '../hooks/useToast';
 import { startRender } from '../lib/render';
+import { generateScriptFromPrompt } from '../lib/scriptGenerator';
+import { generateVideoFromScript } from '../lib/videoGenerator';
 import { SHOWCASE_LIBRARY_ITEMS } from '../lib/studioFixtures';
 import { useUiStore } from '../store/useUiStore';
+
+const PROMPT_SUGGESTIONS = [
+  'POV: You finally understand Binary Search after 3 days 😅',
+  '3 Python tricks that feel illegal to know 🐍',
+  'React useEffect explained with real life analogies ⚛️',
+  'System Design: WebSockets vs Long Polling in 60s ⚡',
+  'Why Clean Code will save your software engineering career 💻',
+] as const;
 
 const PIPELINE_STEPS = [
   { label: 'Creator DNA loaded', state: 'done' },
@@ -55,27 +65,25 @@ export function CreatePage() {
     setDraftIdea(trimmed);
     setSubmitting(true);
     try {
+      const generatedScript = generateScriptFromPrompt(trimmed);
       const accepted = await startRender({
         projectId: `proj_${Date.now().toString(36)}`,
-        hook: trimmed.slice(0, 280),
-        script: [
-          { scene: 'Hook', text: trimmed.slice(0, 280) },
-          {
-            scene: 'Explanation',
-            text: 'Binary search is a simple and efficient algorithm that helps us find an element in a sorted array in log n time.',
-          },
-          {
-            scene: 'CTA',
-            text: 'Save this for your next coding interview & follow for more!',
-          },
-        ],
-        cta: 'Save this for your next coding interview & follow for more!',
-        caption: `${trimmed.slice(0, 200)} ✨`,
-        hashtags: ['#CSE', '#CodingLife', '#StudyWithMe', '#BinarySearch', '#StudentsLife'],
+        hook: generatedScript.hook,
+        script: generatedScript.scenes.map((s) => ({
+          scene: s.scene,
+          text: s.text,
+        })),
+        cta: generatedScript.cta,
+        caption: generatedScript.caption,
+        hashtags: generatedScript.hashtags,
       });
+
+      // Synthesize custom 9:16 vertical short video in client canvas
+      void generateVideoFromScript(accepted.jobId, generatedScript);
+
       push({
         title: 'Creating your video...',
-        description: `Render job ${accepted.jobId} started.`,
+        description: `Render job ${accepted.jobId} started for "${generatedScript.title}".`,
         tone: 'success',
       });
       navigate(`/render/${accepted.jobId}`);
@@ -100,19 +108,48 @@ export function CreatePage() {
           description="The more specific the idea, the better the first script."
         />
         <CardContent className="pt-5">
-          <form onSubmit={onSubmit} className="space-y-3">
-            <label htmlFor="create-idea" className="sr-only">
-              Video idea
-            </label>
-            <textarea
-              id="create-idea"
-              value={idea}
-              onChange={(event) => setIdea(event.target.value)}
-              rows={3}
-              placeholder="e.g. Three signs your study routine is broken (and the fix)"
-              className="w-full resize-y rounded-xl border border-line bg-surface-muted px-4 py-3 text-body text-ink-900 placeholder:text-ink-300 focus:bg-surface"
-            />
-            <div className="flex flex-wrap items-center gap-3">
+          <form onSubmit={onSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="create-idea" className="sr-only">
+                Video idea
+              </label>
+              <textarea
+                id="create-idea"
+                value={idea}
+                onChange={(event) => setIdea(event.target.value)}
+                rows={3}
+                placeholder="e.g. Three signs your study routine is broken (and the fix)"
+                className="w-full resize-y rounded-xl border border-line bg-surface-muted px-4 py-3 text-body text-ink-900 placeholder:text-ink-300 focus:bg-surface"
+              />
+            </div>
+
+            {/* Quick Prompt Suggestions */}
+            <div className="space-y-1.5">
+              <p className="text-tiny font-semibold uppercase tracking-wider text-ink-500">
+                Suggested Prompts
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {PROMPT_SUGGESTIONS.map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    onClick={() => {
+                      setIdea(suggestion);
+                      setDraftIdea(suggestion);
+                    }}
+                    className={`rounded-lg border px-2.5 py-1 text-tiny font-medium transition-colors ${
+                      idea === suggestion
+                        ? 'border-peach-400 bg-peach-100 text-peach-900'
+                        : 'border-line bg-surface-muted/80 text-ink-700 hover:border-peach-200 hover:bg-peach-50'
+                    }`}
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 pt-1">
               <Button type="submit" variant="secondary" disabled={idea.trim().length === 0}>
                 Save idea
               </Button>
